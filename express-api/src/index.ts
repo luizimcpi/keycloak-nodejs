@@ -1,7 +1,7 @@
 import express from 'express';
 import Token from 'keycloak-connect/middleware/auth-utils/token'
 import Signature from 'keycloak-connect/middleware/auth-utils/signature'
-
+import jwt from 'jsonwebtoken'
 
 var app = express();
 
@@ -9,7 +9,7 @@ var app = express();
 const protectMiddleware = (req, res, next) => {
   const headers = req.headers;
   const tokenRaw = headers.authorization.split(" ").slice(-1)[0];
-  console.log('token Raw '+ tokenRaw);
+  //console.log('token Raw '+ tokenRaw);
   const token = new Token(tokenRaw, "express-api"); // deve ser criado um client no keycloak com esse nome
   const signature = new Signature({
     realmUrl: 'http://localhost:8080/realms/my-test-realm',
@@ -17,6 +17,9 @@ const protectMiddleware = (req, res, next) => {
     minTimeBetweenJwksRequests: 0
   })
 
+  const tokenData = jwt.decode(tokenRaw);
+  console.log(tokenData);
+  req.tokenData = tokenData;
 //publicKey pode ser obtido nos realm settings do keycloak -> keys -> pegar a public key rsa-generated RS256
 
   try {
@@ -33,10 +36,28 @@ const protectMiddleware = (req, res, next) => {
   }
 }
 
+const checkRoles = (req, res, next) => {
+  try {
+    const tokenData = req.tokenData;
+    const roles = tokenData.realm_access.roles;
+
+    const isAdmin = roles.includes("admin");
+
+    if(isAdmin) {
+      next();
+    } else {
+      res.status(401).json({message: "Não autorizado"});
+    }
+  } catch (e) {
+    res.status(401).json({message: "Token inválido"});
+  }
+}
+
 app.use(protectMiddleware);
 
 
 app.get('/', function(req, res, next){
+  checkRoles(req, res, next)
   res.json({key: "value"});
 })
 
